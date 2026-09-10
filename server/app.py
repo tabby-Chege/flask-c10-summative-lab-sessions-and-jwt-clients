@@ -1,9 +1,8 @@
 from flask import Flask
 from .config import Config
 from .extensions import db, migrate, bcrypt, jwt
-from .models import User
 from .auth import auth_bp
-
+from .notes import notes_bp  # <-- Imported from notes.py
 
 def create_app():
     app = Flask(__name__)
@@ -14,7 +13,9 @@ def create_app():
     bcrypt.init_app(app)
     jwt.init_app(app)
 
+    # Register Blueprints
     app.register_blueprint(auth_bp)
+    app.register_blueprint(notes_bp)
 
     @app.route("/")
     def index():
