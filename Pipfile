@@ -19,6 +19,7 @@ flask-migrate = "*"
 flask-bcrypt = "*"
 flask-restful = "*"
 flask-jwt-extended = "*"
+marshmallow = "*"
 
 [dev-packages]
 pytest = "*"

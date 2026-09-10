@@ -1,31 +1,41 @@
 from flask import Blueprint, request
-from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
+from flask_jwt_extended import (
+    create_access_token,
+    get_jwt_identity,
+    jwt_required,
+)
+from marshmallow import ValidationError
+
 from .extensions import db
 from .models import User
+from .schemas import LoginSchema, SignupSchema, UserSchema
+
+
 auth_bp = Blueprint("auth", __name__)
+
+user_schema = UserSchema()
+signup_schema = SignupSchema()
+login_schema = LoginSchema()
 
 
 @auth_bp.post("/signup")
 def signup():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
 
-    username = data.get("username")
-    password = data.get("password")
-    password_confirmation = data.get("password_confirmation")
+    try:
+        user_data = signup_schema.load(data)
+    except ValidationError as error:
+        return {"errors": error.messages}, 400
 
-    if not username or not password or not password_confirmation:
-        return {"error": "Username, password, and password confirmation are required"}, 400
-
-    if password != password_confirmation:
-        return {"error": "Passwords do not match"}, 400
-
-    existing_user = User.query.filter_by(username=username).first()
+    existing_user = User.query.filter_by(
+        username=user_data["username"]
+    ).first()
 
     if existing_user:
         return {"error": "Username already exists"}, 409
 
-    user = User(username=username)
-    user.set_password(password)
+    user = User(username=user_data["username"])
+    user.set_password(user_data["password"])
 
     db.session.add(user)
     db.session.commit()
@@ -34,39 +44,32 @@ def signup():
 
     return {
         "token": access_token,
-        "user": {
-            "id": user.id,
-            "username": user.username
-        }
+        "user": user_schema.dump(user),
     }, 201
-
 
 
 @auth_bp.post("/login")
 def login():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
 
-    username = data.get("username")
-    password = data.get("password")
+    try:
+        login_data = login_schema.load(data)
+    except ValidationError as error:
+        return {"errors": error.messages}, 400
 
-    if not username or not password:
-        return {"error": "Username and password are required"}, 400
+    user = User.query.filter_by(
+        username=login_data["username"]
+    ).first()
 
-    user = User.query.filter_by(username=username).first()
-
-    if not user or not user.check_password(password):
+    if not user or not user.check_password(login_data["password"]):
         return {"error": "Invalid username or password"}, 401
 
     access_token = create_access_token(identity=str(user.id))
 
     return {
         "token": access_token,
-        "user": {
-            "id": user.id,
-            "username": user.username
-        }
+        "user": user_schema.dump(user),
     }, 200
-
 
 
 @auth_bp.get("/me")
@@ -74,12 +77,9 @@ def login():
 def me():
     user_id = get_jwt_identity()
 
-    user = User.query.get(int(user_id))
+    user = db.session.get(User, int(user_id))
 
     if not user:
         return {"error": "User not found"}, 404
 
-    return {
-        "id": user.id,
-        "username": user.username
-    }, 200
+    return user_schema.dump(user), 200
